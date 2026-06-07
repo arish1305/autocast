@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from src.core.models import TrendItem
 from src.core.llm_client import llm_client
 from src.core.logger import logger
+from src.intelligence.story_understanding import StoryContext
 from .prompts.strategy_prompts import get_strategy_prompt
 
 class ContentStrategy(BaseModel):
@@ -11,12 +12,13 @@ class ContentStrategy(BaseModel):
     tone: str
     narrative_beats: List[str]
 
-def create_content_strategy(item: TrendItem) -> Optional[ContentStrategy]:
+def create_content_strategy(item: TrendItem, story_context: Optional[StoryContext] = None) -> Optional[ContentStrategy]:
     """Uses LLM to decide the best strategy for a trend topic."""
     logger.info(f"Creating content strategy for: {item.topic}")
     
     source_urls = [s.url for s in item.sources]
-    prompt = get_strategy_prompt(item.topic, item.summary, source_urls)
+    context_block = story_context.compact_context() if story_context else ""
+    prompt = get_strategy_prompt(item.topic, item.summary, source_urls, context_block)
     
     result = llm_client.generate_json(prompt)
     

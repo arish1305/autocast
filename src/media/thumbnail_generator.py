@@ -1,12 +1,24 @@
 import os
-import requests
+import re
+from typing import Iterable, List, Optional
+
+from PIL import Image, ImageDraw, ImageFont
+from pydantic import BaseModel
+
 from src.core.config import settings
-from src.core.logger import logger
 from src.core.llm_client import llm_client
-from typing import Optional
+from src.core.logger import logger
+
+
+class ThumbnailConcept(BaseModel):
+    hook_text: str
+    emotional_angle: str
+    visual_focus: str
+    accent_color: str = "#00b8a9"
+
 
 class ThumbnailGenerator:
-    """Generates thumbnails using local PIL composition for zero cost."""
+    """Generates mobile-readable YouTube thumbnails with concept scoring."""
     
     def __init__(self):
         self.output_dir = os.path.join(settings.DATA_DIR, "thumbnails")
@@ -14,44 +26,192 @@ class ThumbnailGenerator:
         
     def generate_thumbnail(self, topic: str, strategy_summary: str) -> Optional[str]:
         """
-        Creates a thumbnail by combining a background image with text overlays.
+        Creates a thumbnail by selecting the strongest concept and rendering it locally.
         """
         logger.info(f"Generating local thumbnail for: {topic}")
         
         try:
-            from PIL import Image, ImageDraw, ImageFont
-            
-            # 1. Create a dark gradient or solid background
-            width, height = 1280, 720
-            img = Image.new('RGB', (width, height), color=(20, 20, 30))
-            draw = ImageDraw.Draw(img)
-            
-            # 2. Add some techy elements (simple lines)
-            for i in range(0, width, 50):
-                draw.line([(i, 0), (i, height)], fill=(40, 40, 60), width=1)
-            
-            # 3. Add Title Text
-            # We'll try to find a system font
-            font_path = "C:\\Windows\\Fonts\\arialbd.ttf" if os.name == 'nt' else "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-            if not os.path.exists(font_path):
-                font = ImageFont.load_default()
-            else:
-                font = ImageFont.truetype(font_path, 80)
-            
-            # Split topic into lines if too long
-            title = topic.upper()
-            draw.text((60, 300), title, font=font, fill=(255, 255, 255))
-            
-            filename = f"thumb_{topic.replace(' ', '_').lower()[:20]}.png"
-            path = os.path.join(self.output_dir, filename)
-            img.save(path)
-                
+            concepts = self.generate_thumbnail_concepts(topic, strategy_summary)
+            concept = self._select_best_concept(concepts)
+            path = self._render_thumbnail(topic, strategy_summary, concept)
             logger.info(f"Local thumbnail saved to: {path}")
             return path
-            
         except Exception as e:
             logger.error(f"Local thumbnail generation failed: {e}")
             return None
+
+    def generate_thumbnail_concepts(self, topic: str, strategy_summary: str) -> List[ThumbnailConcept]:
+        prompt = f"""
+Generate 5 thumbnail concepts for a technology news YouTube video.
+
+Topic: {topic}
+Summary: {strategy_summary[:800]}
+
+Return JSON with a "concepts" array. Each concept needs:
+- hook_text: 2-5 words, max 24 characters, high curiosity but factual
+- emotional_angle: short phrase like "shock", "urgency", "breakthrough", "risk"
+- visual_focus: concrete object/entity the thumbnail should show
+- accent_color: hex color
+
+Rules:
+1. No misleading clickbait.
+2. Text must be readable on a phone.
+3. Prefer specific company/product/entity wording.
+"""
+        result = llm_client.generate_json(prompt)
+        raw_concepts = result.get("concepts") if isinstance(result, dict) else result
+        concepts = []
+        if isinstance(raw_concepts, list):
+            for item in raw_concepts:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    concepts.append(ThumbnailConcept(**item))
+                except Exception:
+                    continue
+        return concepts or self._fallback_concepts(topic, strategy_summary)
+
+    def _fallback_concepts(self, topic: str, strategy_summary: str) -> List[ThumbnailConcept]:
+        entity = _main_entity(topic)
+        hooks = [
+            f"{entity} Shift",
+            "Why It Matters",
+            "Big Tech Move",
+            "What Changed",
+            "Watch This",
+        ]
+        angles = ["urgency", "impact", "market shift", "context", "curiosity"]
+        colors = ["#00b8a9", "#f2b441", "#e8505b", "#7ac975", "#5b8def"]
+        return [
+            ThumbnailConcept(
+                hook_text=_fit_text(hook, 24),
+                emotional_angle=angles[index],
+                visual_focus=entity or topic,
+                accent_color=colors[index],
+            )
+            for index, hook in enumerate(hooks)
+        ]
+
+    def _select_best_concept(self, concepts: List[ThumbnailConcept]) -> ThumbnailConcept:
+        def score(concept: ThumbnailConcept) -> int:
+            hook = concept.hook_text.strip()
+            return (
+                (8 if 8 <= len(hook) <= 24 else 0)
+                + (4 if len(hook.split()) <= 5 else 0)
+                + (3 if concept.visual_focus else 0)
+                + (2 if concept.emotional_angle else 0)
+            )
+
+        return sorted(concepts, key=score, reverse=True)[0]
+
+    def _render_thumbnail(self, topic: str, summary: str, concept: ThumbnailConcept) -> str:
+        width, height = 1280, 720
+        img = Image.new("RGB", (width, height), color=(13, 17, 24))
+        draw = ImageDraw.Draw(img)
+        accent = _hex_to_rgb(concept.accent_color)
+
+        for x in range(width):
+            blend = x / width
+            color = (
+                int(13 + blend * 28),
+                int(17 + blend * 20),
+                int(24 + blend * 34),
+            )
+            draw.line([(x, 0), (x, height)], fill=color)
+
+        draw.rectangle((0, 0, width, 18), fill=accent)
+        draw.polygon([(840, 0), (1280, 0), (1280, 720), (980, 720)], fill=(24, 31, 42))
+        draw.ellipse((870, 110, 1210, 450), outline=accent, width=12)
+        draw.line((905, 500, 1210, 610), fill=(230, 236, 245), width=8)
+        draw.rectangle((900, 500, 1170, 620), outline=accent, width=8)
+
+        hook_font = _font(92)
+        label_font = _font(34)
+        detail_font = _font(30)
+
+        draw.text((70, 70), _fit_text(concept.emotional_angle.upper(), 24), font=label_font, fill=accent)
+        _draw_wrapped(draw, concept.hook_text.upper(), (70, 145), hook_font, 690, (255, 255, 255), 3)
+
+        visual_focus = concept.visual_focus or _main_entity(topic)
+        draw.rounded_rectangle((70, 555, 760, 640), radius=18, fill=(232, 238, 246))
+        draw.text((105, 579), _fit_text(visual_focus.upper(), 30), font=detail_font, fill=(12, 16, 22))
+
+        filename = f"thumb_{_slug(topic)[:36]}.png"
+        path = os.path.join(self.output_dir, filename)
+        img.save(path)
+        return path
+
+
+def _main_entity(topic: str) -> str:
+    words = re.findall(r"[A-Z][A-Za-z0-9&.'-]+", topic)
+    if words:
+        return " ".join(words[:2])
+    return " ".join(topic.split()[:2])
+
+
+def _font(size: int) -> ImageFont.FreeTypeFont:
+    candidates = [
+        "C:\\Windows\\Fonts\\arialbd.ttf",
+        "C:\\Windows\\Fonts\\arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    return ImageFont.load_default()
+
+
+def _draw_wrapped(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    position: tuple,
+    font: ImageFont.FreeTypeFont,
+    max_width: int,
+    fill: tuple,
+    max_lines: int,
+) -> None:
+    lines = []
+    current = ""
+    for word in text.split():
+        candidate = f"{current} {word}".strip()
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if bbox[2] <= max_width:
+            current = candidate
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+
+    x, y = position
+    for line in lines[:max_lines]:
+        draw.text((x + 4, y + 4), line, font=font, fill=(0, 0, 0))
+        draw.text((x, y), line, font=font, fill=fill)
+        y += font.size + 4
+
+
+def _hex_to_rgb(value: str) -> tuple:
+    value = (value or "#00b8a9").strip().lstrip("#")
+    if len(value) != 6:
+        return (0, 184, 169)
+    try:
+        return tuple(int(value[index : index + 2], 16) for index in (0, 2, 4))
+    except ValueError:
+        return (0, 184, 169)
+
+
+def _fit_text(value: str, max_chars: int) -> str:
+    text = re.sub(r"\s+", " ", value or "").strip()
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1].rstrip() + "."
+
+
+def _slug(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+    return slug or "thumbnail"
+
 
 # Global instance
 thumbnail_generator = ThumbnailGenerator()

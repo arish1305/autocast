@@ -1,10 +1,12 @@
-def get_strategy_prompt(topic: str, summary: str, source_urls: list) -> str:
+def get_strategy_prompt(topic: str, summary: str, source_urls: list, story_context: str = "") -> str:
     return f"""
 Analyze the following trending technology topic and define a content strategy for a YouTube video.
 
 Topic: {topic}
 Summary: {summary}
 Sources: {', '.join(source_urls)}
+Story Context:
+{story_context or 'No additional story context available.'}
 
 Output a JSON object with the following fields:
 - video_type: "short" or "long"
@@ -16,4 +18,5 @@ Rules:
 1. If the topic is a quick update or single event, choose "short".
 2. If the topic is complex or has deep implications, choose "long".
 3. Ensure the tone matches the impact of the news.
+4. Put the most concrete company, product, event, or statistic early in the narrative beats.
 """

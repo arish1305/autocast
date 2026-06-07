@@ -1,8 +1,10 @@
 from src.core.logger import logger
 from src.core.config import settings
 from src.intelligence.discovery import discover_trends
+from src.intelligence.story_understanding import build_story_context
 from src.intelligence.strategy import create_content_strategy
 from src.intelligence.scriptwriter import generate_script
+from src.intelligence.quality_audit import audit_video_plan
 from src.media.tts_engine import text_to_speech
 from src.media.audio_utils import normalize_audio
 from src.media.asset_manager import break_script_into_scenes, source_visual_assets
@@ -25,7 +27,13 @@ def main():
             
             # Phase 4-11: Full Pipeline (Free Edition)
             for i, trend in enumerate(trends[:1]):
-                strategy = create_content_strategy(trend)
+                story_context = build_story_context(trend)
+                logger.info(
+                    f"Story context ready: entities={story_context.entities[:5]}, "
+                    f"technologies={story_context.technologies[:5]}"
+                )
+
+                strategy = create_content_strategy(trend, story_context)
                 if strategy:
                     logger.info(f"Strategy for '{trend.topic}': {strategy.video_type}, {strategy.tone}")
                     
@@ -33,7 +41,8 @@ def main():
                         trend.topic, 
                         strategy.video_type, 
                         strategy.tone, 
-                        strategy.narrative_beats
+                        strategy.narrative_beats,
+                        story_context
                     )
                     
                     if script:
@@ -44,16 +53,34 @@ def main():
                         audio_path = text_to_speech(script.script_text, audio_filename)
                         if audio_path:
                             normalize_audio(audio_path)
+                        else:
+                            logger.error("Skipping video render because narration audio was not generated.")
+                            continue
                             
                         # Phase 7: Visual Asset Generation
-                        scenes = break_script_into_scenes(script.script_text)
-                        scenes = source_visual_assets(scenes)
+                        scenes = break_script_into_scenes(
+                            script.script_text,
+                            story_context,
+                            strategy.duration_seconds or script.estimated_runtime,
+                        )
+                        scenes = source_visual_assets(scenes, story_context)
                         
+                        # Phase 9: Thumbnail & Quality Audit
+                        thumb_path = thumbnail_generator.generate_thumbnail(
+                            trend.topic,
+                            story_context.story_summary,
+                        )
+                        quality_report = audit_video_plan(story_context, script, scenes, thumb_path)
+                        if not quality_report.approved:
+                            logger.warning(
+                                "Quality report did not fully approve the plan. "
+                                "Rendering will continue with generated contextual fallbacks where needed."
+                            )
+
                         # Phase 8: Video Composition & Rendering
                         render_path = render_final_video(audio_path, scenes, f"trend_video_{i}.mp4")
                         
-                        # Phase 9: Thumbnail & Metadata
-                        thumb_path = thumbnail_generator.generate_thumbnail(trend.topic, trend.summary)
+                        # Phase 10: Metadata
                         metadata = optimize_metadata(trend.topic, script.script_text)
                         
                         # Phase 11: Publishing
