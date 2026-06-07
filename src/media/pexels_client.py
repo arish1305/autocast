@@ -10,8 +10,9 @@ class PexelsClient:
     
     def __init__(self):
         self.api_key = settings.PEXELS_API_KEY
-        if not self.api_key:
+        if not self.api_key or self.api_key.startswith("your_"):
             logger.warning("PEXELS_API_KEY not found. Stock sourcing will be disabled.")
+            self.api_key = None
             
     def search_videos(self, query: str, limit: int = 3) -> List[Dict]:
         """Searches for videos on Pexels."""
@@ -22,7 +23,7 @@ class PexelsClient:
             logger.info(f"Searching Pexels for videos: {query}")
             headers = {"Authorization": self.api_key}
             params = {"query": query, "per_page": limit}
-            response = requests.get(f"{self.BASE_URL}/videos/search", headers=headers, params=params)
+            response = requests.get(f"{self.BASE_URL}/videos/search", headers=headers, params=params, timeout=20)
             response.raise_for_status()
             
             videos = response.json().get("videos", [])
@@ -39,7 +40,7 @@ class PexelsClient:
         
         try:
             logger.info(f"Downloading asset from {url} to {output_path}")
-            response = requests.get(url, stream=True)
+            response = requests.get(url, stream=True, timeout=60)
             response.raise_for_status()
             with open(output_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):

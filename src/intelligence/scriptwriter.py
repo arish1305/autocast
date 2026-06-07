@@ -2,6 +2,7 @@ from typing import Optional, List
 from pydantic import BaseModel, field_validator
 from src.core.llm_client import llm_client
 from src.core.logger import logger
+from src.intelligence.story_understanding import StoryContext
 from .prompts.script_prompts import get_script_prompt
 
 class VideoScript(BaseModel):
@@ -14,11 +15,18 @@ class VideoScript(BaseModel):
             return " ".join(v)
         return v
 
-def generate_script(topic: str, video_type: str, tone: str, beats: List[str]) -> Optional[VideoScript]:
+def generate_script(
+    topic: str,
+    video_type: str,
+    tone: str,
+    beats: List[str],
+    story_context: Optional[StoryContext] = None,
+) -> Optional[VideoScript]:
     """Generates a video script based on the strategy beats using LLM."""
     logger.info(f"Generating {video_type} script for: {topic}")
     
-    prompt = get_script_prompt(topic, video_type, tone, beats)
+    context_block = story_context.compact_context() if story_context else ""
+    prompt = get_script_prompt(topic, video_type, tone, beats, context_block)
     result = llm_client.generate_json(prompt)
     
     if result:
@@ -30,11 +38,15 @@ def generate_script(topic: str, video_type: str, tone: str, beats: List[str]) ->
     
     # Fallback/Mock Script
     logger.warning("Using fallback script generation.")
-    fallback_text = f"[HOOK] Did you hear about {topic}? This is a game-changer! " \
-                    f"[CONTENT] {topic} is taking the tech world by storm. " \
-                    f"It aims to solve the biggest problem in its niche by doing something revolutionary. " \
-                    f"[IMPACT] We're looking at a future where this becomes standard. " \
-                    f"[CTA] If you want more updates on this, hit like and subscribe!"
+    context_line = ""
+    if story_context and story_context.key_talking_points:
+        context_line = f"The key point is this: {story_context.key_talking_points[0]} "
+    fallback_text = f"[HOOK] {topic} could change what happens next in tech. " \
+                    f"[CONTEXT] {context_line}" \
+                    f"[CONTENT] Here is the important part: {topic}. " \
+                    f"It matters because the companies, products, and people involved could shape the next wave of adoption. " \
+                    f"[IMPACT] Watch how this affects users, developers, and the wider market. " \
+                    f"[CTA] Follow for the next update as this story develops."
     
     return VideoScript(
         script_text=fallback_text,
