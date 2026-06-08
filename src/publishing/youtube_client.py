@@ -1,6 +1,6 @@
 import os
 import pickle
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -27,12 +27,33 @@ class YouTubeClient:
         token_path = "token.pickle"
         
         if os.path.exists(token_path):
-            with open(token_path, "rb") as token:
-                creds = pickle.load(token)
+            try:
+                with open(token_path, "rb") as token:
+                    creds = pickle.load(token)
+            except Exception as e:
+                logger.error(
+                    "Could not read token.pickle. YouTube publishing will be disabled "
+                    f"until you re-authenticate. Error: {e}"
+                )
+                return
                 
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
+                try:
+                    creds.refresh(Request())
+                except RefreshError as e:
+                    logger.error(
+                        "YouTube OAuth token refresh failed. Publishing will be disabled. "
+                        "Delete token.pickle and run setup_youtube_auth.py to re-authenticate. "
+                        f"Error: {e}"
+                    )
+                    return
+                except Exception as e:
+                    logger.error(
+                        "Unexpected YouTube OAuth refresh error. Publishing will be disabled. "
+                        f"Error: {e}"
+                    )
+                    return
             else:
                 # This requires browser interaction, so it will fail in headless/background
                 logger.error("OAuth2 token not found or invalid. Manual authentication required.")
@@ -41,7 +62,10 @@ class YouTubeClient:
             with open(token_path, "wb") as token:
                 pickle.dump(creds, token)
 
-        self.youtube = build("youtube", "v3", credentials=creds)
+        try:
+            self.youtube = build("youtube", "v3", credentials=creds)
+        except Exception as e:
+            logger.error(f"Failed to initialize YouTube service. Publishing will be disabled. Error: {e}")
 
     def upload_video(self, file_path: str, title: str, description: str, tags: List[str], category_id: str = "28") -> Optional[str]:
         """Uploads a video to YouTube."""

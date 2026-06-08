@@ -1,4 +1,5 @@
 from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip, concatenate_videoclips
+from moviepy.video.fx import FadeIn, FadeOut
 from typing import List, Optional
 import os
 import re
@@ -45,6 +46,8 @@ def create_video_project(audio_path: str, scenes: List[VisualScene], output_name
                     continue
 
                 visual_clip = _fit_to_vertical(visual_clip).with_duration(clip_duration)
+                visual_clip = _apply_motion_effect(visual_clip, scene, clip_duration, i)
+                visual_clip = _apply_transition_effects(visual_clip, scene, i)
                 visual_clip = _add_caption_overlay(visual_clip, scene, clip_duration)
                 clips.append(visual_clip)
                 
@@ -55,7 +58,7 @@ def create_video_project(audio_path: str, scenes: List[VisualScene], output_name
             logger.error("No clips were successfully processed.")
             return None
             
-        final_video = concatenate_videoclips(clips, method="compose")
+        final_video = concatenate_videoclips(clips, method="compose", padding=-0.12)
         # MoviePy 2.x: set_audio -> with_audio
         final_video = final_video.with_audio(audio)
         
@@ -96,6 +99,37 @@ def _fit_to_vertical(clip):
         width=TARGET_WIDTH,
         height=TARGET_HEIGHT,
     )
+
+
+def _apply_motion_effect(clip, scene: VisualScene, duration: float, index: int):
+    """Adds subtle Ken Burns motion for generated/static graphics."""
+    try:
+        if scene.asset_type != "image":
+            return clip
+        zoom_amount = 0.035 if scene.graphic_type != "statistic" else 0.025
+        moving = clip.resized(lambda t: 1 + zoom_amount * min(t / max(duration, 0.1), 1))
+        return CompositeVideoClip(
+            [moving.with_position(("center", "center"))],
+            size=(TARGET_WIDTH, TARGET_HEIGHT),
+            bg_color=(8, 12, 18),
+        ).with_duration(duration)
+    except Exception as exc:
+        logger.warning(f"Motion effect skipped: {exc}")
+        return clip
+
+
+def _apply_transition_effects(clip, scene: VisualScene, index: int):
+    """Applies short news-style transitions while keeping render robust."""
+    try:
+        effects = []
+        if index > 0 and scene.transition_type in {"crossfade", "headline", "push", "zoom"}:
+            effects.append(FadeIn(0.18))
+        if scene.transition_type in {"crossfade", "headline"}:
+            effects.append(FadeOut(0.16))
+        return clip.with_effects(effects) if effects else clip
+    except Exception as exc:
+        logger.warning(f"Transition effect skipped: {exc}")
+        return clip
 
 
 def _center_crop_to_ratio(clip, target_ratio: float):
