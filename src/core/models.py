@@ -8,6 +8,7 @@ class SourceInfo(BaseModel):
     external_id: str
     score: float = 0.0
     engagement_count: int = 0  # comments, upvotes, etc.
+    published_at: Optional[datetime] = None
 
 class TrendItem(BaseModel):
     topic: str
@@ -15,6 +16,7 @@ class TrendItem(BaseModel):
     sources: List[SourceInfo] = []
     trend_score: float = 0.0
     detected_at: datetime = Field(default_factory=datetime.utcnow)
+    latest_published_at: Optional[datetime] = None
     confidence_score: float = 0.0
     is_verified: bool = False
     

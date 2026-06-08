@@ -7,16 +7,18 @@ The main goal of this version is video quality: every scene should be tied to th
 ## What It Does
 
 - Discovers technology trends from Hacker News and RSS feeds.
-- Scores and verifies stories by source confidence and engagement.
-- Builds story understanding: entities, companies, products, technologies, events, statistics, and key talking points.
+- Scores and verifies stories by freshness, engagement, source mentions, and authority.
+- Filters stale content older than the configured freshness window.
+- Builds story understanding: companies, products, organizations, technologies, people, locations, events, statistics, timelines, main story angle, and key talking points.
+- Uses optional spaCy NER plus LLM-assisted extraction and strict entity filters.
 - Generates strategy and script using local Ollama when available.
 - Falls back to deterministic rule-based logic if Ollama is not running.
-- Splits narration into scene-level visual plans.
-- Creates specific stock-search queries for each scene.
+- Splits narration into scene-level visual plans with visual type, subjects, action, emotion, location, transition, and graphic type.
+- Creates semantic stock-search queries for each scene instead of raw script fragments.
 - Scores visual candidates by relevance and quality.
 - Generates contextual fallback scene graphics when no good stock asset is found.
 - Creates Edge-TTS narration and normalizes audio with ffmpeg.
-- Renders vertical 9:16 video with MoviePy.
+- Renders vertical 9:16 video with MoviePy, captions, light motion, and transitions.
 - Generates mobile-readable thumbnails with Pillow.
 - Runs a quality audit before final rendering.
 - Uploads privately to YouTube only when valid YouTube OAuth credentials/token are available.
@@ -26,6 +28,7 @@ The main goal of this version is video quality: every scene should be tied to th
 - Python 3.10+
 - Pydantic / Pydantic Settings
 - Ollama for local LLM generation
+- spaCy for optional local named-entity recognition
 - Edge-TTS for narration
 - MoviePy for video rendering
 - Pillow and NumPy for graphics/captions
@@ -59,6 +62,7 @@ Install these before running:
 - Python 3.10 or newer
 - ffmpeg
 - Optional: Ollama, for better LLM-generated story/script/scene planning
+- Optional: spaCy English model, for stronger local entity extraction
 - Optional: Pexels API key, for stock video sourcing
 - Optional: YouTube OAuth credentials, for upload
 
@@ -103,6 +107,14 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
+Install the optional spaCy English model:
+
+```powershell
+python -m spacy download en_core_web_sm
+```
+
+If this model is not installed, AutoCast still runs with dictionary and rule-based entity extraction.
+
 ## Environment Configuration
 
 Create `.env` from `.env.example` and fill in the values you want to use.
@@ -112,12 +124,15 @@ Minimum local configuration:
 ```env
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=mistral
+OLLAMA_TIMEOUT_SECONDS=600
+OLLAMA_RETRY_ATTEMPTS=3
 TTS_VOICE=en-US-GuyNeural
 NICHE=technology
 LANGUAGE=en
 REGION=US
 VIDEO_FORMAT=short
 UPLOAD_SCHEDULE=daily
+TREND_MAX_AGE_DAYS=14
 ```
 
 Optional stock-asset keys:
@@ -151,6 +166,12 @@ ollama serve
 ```
 
 The system still runs without Ollama. In that case, it uses fallback strategy/script/scene logic.
+
+You can verify Ollama is reachable:
+
+```powershell
+Invoke-RestMethod http://localhost:11434/api/tags
+```
 
 ## How To Run
 
@@ -213,6 +234,7 @@ Run the offline quality pipeline test:
 This does not require Ollama, Pexels, Pixabay, or YouTube. It verifies:
 
 - story context generation
+- entity filtering
 - scene planning
 - fallback visual generation
 - thumbnail generation
@@ -270,6 +292,10 @@ Most important improvement:
 
 > The earlier issue was generic visuals. The upgrade adds story understanding, scene-level visual requirements, entity-aware search queries, asset relevance scoring, contextual fallback graphics, and a final quality audit.
 
+V2 upgrade:
+
+> The second upgrade adds stricter entity extraction with optional spaCy NER, stale-content filtering, semantic visual direction, parallel asset search, stronger asset thresholds for data/company scenes, scene transitions, Ken Burns-style motion for graphics, and stricter quality scoring.
+
 Why it is robust:
 
 > The system degrades gracefully. If Ollama fails, rule-based logic still works. If stock APIs fail, contextual visuals are generated locally. If YouTube credentials are missing, the final video is still rendered locally.
@@ -283,6 +309,20 @@ HTTPConnectionPool(host='localhost', port=11434)
 ```
 
 Fix: start Ollama with `ollama serve`, or ignore it and use fallback mode.
+
+spaCy model missing:
+
+```text
+spaCy model en_core_web_sm is not available
+```
+
+Fix:
+
+```powershell
+.\venv\Scripts\python.exe -m spacy download en_core_web_sm
+```
+
+This is optional. The app still runs with fallback entity extraction.
 
 No Pixabay assets:
 
@@ -299,6 +339,21 @@ YouTube API credentials missing
 ```
 
 This is okay for local rendering. Add credentials and run OAuth only if you want uploads.
+
+YouTube OAuth `invalid_grant`:
+
+```text
+google.auth.exceptions.RefreshError: invalid_grant
+```
+
+This means `token.pickle` is expired, revoked, or does not match the current OAuth app credentials. Local rendering still works, but YouTube publishing is disabled until you re-authenticate.
+
+Fix:
+
+```powershell
+Remove-Item .\token.pickle
+.\venv\Scripts\python.exe setup_youtube_auth.py
+```
 
 Rendering is slow:
 

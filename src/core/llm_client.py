@@ -1,6 +1,7 @@
 import requests
 import json
 import re
+import time
 from src.core.config import settings
 from src.core.logger import logger
 from typing import Optional, Any
@@ -73,29 +74,37 @@ class LocalLLMClient:
         
         full_prompt = f"{prompt}\n\nStrictly output valid JSON only. No preamble."
         
-        try:
-            response = requests.post(
-                f"{self.base_url}/generate",
-                json={
-                    "model": self.model,
-                    "prompt": full_prompt,
-                    "stream": False,
-                    "format": "json"
-                },
-                timeout=120
-            )
-            response.raise_for_status()
-            
-            result = response.json()
-            response_text = result.get("response", "")
-            
-            parsed = _extract_json_payload(response_text)
-            if parsed is None:
-                logger.error("Local LLM returned text that could not be parsed as JSON.")
-            return parsed
-        except Exception as e:
-            logger.error(f"Ollama generation failed: {e}")
-            return None
+        attempts = max(settings.OLLAMA_RETRY_ATTEMPTS, 1)
+        last_error = None
+        for attempt in range(1, attempts + 1):
+            try:
+                response = requests.post(
+                    f"{self.base_url}/generate",
+                    json={
+                        "model": self.model,
+                        "prompt": full_prompt,
+                        "stream": False,
+                        "format": "json"
+                    },
+                    timeout=settings.OLLAMA_TIMEOUT_SECONDS
+                )
+                response.raise_for_status()
+
+                result = response.json()
+                response_text = result.get("response", "")
+
+                parsed = _extract_json_payload(response_text)
+                if parsed is None:
+                    logger.error("Local LLM returned text that could not be parsed as JSON.")
+                return parsed
+            except Exception as e:
+                last_error = e
+                if attempt < attempts:
+                    logger.warning(f"Ollama generation attempt {attempt}/{attempts} failed. Retrying...")
+                    time.sleep(min(2 * attempt, 8))
+
+        logger.error(f"Ollama generation failed after {attempts} attempt(s): {last_error}")
+        return None
 
 # Global instance
 llm_client = LocalLLMClient()

@@ -1,5 +1,6 @@
 import requests
 from typing import List
+from datetime import datetime
 from src.core.logger import logger
 from src.core.models import NewsArticle
 
@@ -25,7 +26,8 @@ def fetch_top_stories(limit: int = 20) -> List[NewsArticle]:
                     url=data["url"],
                     source_name="HackerNews",
                     author=data.get("by"),
-                    engagement_count=data.get("score", 0)
+                    engagement_count=data.get("score", 0),
+                    published_at=datetime.utcfromtimestamp(data["time"]) if data.get("time") else None,
                 ))
         return articles
     except Exception as e:

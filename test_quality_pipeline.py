@@ -40,10 +40,16 @@ def run_quality_pipeline_smoke_test():
     )
 
     context = build_story_context(trend, use_llm=False)
+    bad_entities = {"Have", "Imagine", "What", "In", "This", "That"}
+    assert not bad_entities.intersection(context.entities), context.entities
+    assert "OpenAI" in context.companies, context.companies
+    assert "GPT-5" in context.products, context.products
+
     scenes = asset_manager.break_script_into_scenes(script.script_text, context, script.estimated_runtime)
     scenes = asset_manager.source_visual_assets(scenes, context)
     thumbnail_path = thumbnail_module.thumbnail_generator.generate_thumbnail(trend.topic, context.story_summary)
     report = audit_video_plan(context, script, scenes, thumbnail_path)
+    assert report.approved, report
 
     print("Story entities:", context.entities[:5])
     print("Scene count:", len(scenes))

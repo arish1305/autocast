@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     # Free/Local Service Settings
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "mistral"
+    OLLAMA_TIMEOUT_SECONDS: int = 600
+    OLLAMA_RETRY_ATTEMPTS: int = 3
     TTS_VOICE: str = "en-US-GuyNeural" # Edge-TTS voice
     
     # Optional Free Tier Keys
@@ -24,6 +26,7 @@ class Settings(BaseSettings):
     REGION: str = "US"
     VIDEO_FORMAT: str = "short"  # short or long
     UPLOAD_SCHEDULE: str = "daily"
+    TREND_MAX_AGE_DAYS: int = 14
     
     # Paths
     DATA_DIR: str = "data"
