@@ -1,59 +1,405 @@
-# AutoCast AI (Free Edition) 🚀
+# AutoCast AI
 
-AutoCast AI is a **zero-cost, fully autonomous** system designed to identify trending technology news, verify facts, generate high-retention scripts, and produce professional video content using only local and open-source tools.
+AutoCast AI is an autonomous technology-news video generation pipeline. It discovers trending stories, verifies and ranks them, builds a semantic story context, writes a short-form script, creates narration, finds or generates scene-matched visuals, renders a vertical video, creates a thumbnail and metadata, and can publish privately to YouTube.
 
-## 🌟 Features (Free Edition)
+The main goal of this version is video quality: every scene should be tied to the narration instead of using random generic stock footage.
 
-- **Local Intelligence**: Uses **Ollama** (Mistral/Phi-3) for zero-cost content analysis and scriptwriting.
-- **High-Quality Free Voice**: Integrates **Edge-TTS** for professional neural narration without API costs.
-- **Smart Asset Sourcing**: Automated fetching from Pexels/Pixabay free tiers.
-- **Local Thumbnails**: Programmatic thumbnail generation using PIL, optimized for mobile visibility.
-- **Zero Dependencies on Paid APIs**: Built to run continuously on consumer hardware.
+## What It Does
 
-## 🛠️ Tech Stack
+- Discovers technology trends from Hacker News and RSS feeds.
+- Scores and verifies stories by freshness, engagement, source mentions, and authority.
+- Filters stale content older than the configured freshness window.
+- Builds story understanding: companies, products, organizations, technologies, people, locations, events, statistics, timelines, main story angle, and key talking points.
+- Builds a source-backed research brief by reading the original article pages when available.
+- Uses optional spaCy NER plus LLM-assisted extraction and strict entity filters.
+- Generates strategy and script using local Ollama when available.
+- Runs a content-correction stage before TTS so narration has a real takeaway and never reads URLs aloud.
+- Enforces a minimum short-form runtime and rewrites weak/generic scripts with source-backed facts.
+- Falls back to deterministic rule-based logic if Ollama is not running or returns poor output.
+- Splits narration into scene-level visual plans with visual type, subjects, action, emotion, location, transition, and graphic type.
+- Creates semantic stock-search queries for each scene instead of raw script fragments.
+- Scores visual candidates by relevance and quality.
+- Uses contextual news graphics for opening/data/company scenes and fallback graphics when no good stock asset is found.
+- Creates Edge-TTS narration and normalizes audio with ffmpeg.
+- Renders vertical 9:16 video with MoviePy, captions, light motion, and transitions.
+- Generates mobile-readable thumbnails with Pillow.
+- Runs a quality audit before final rendering.
+- Uploads privately to YouTube only when valid YouTube OAuth credentials/token are available.
 
-- **Core**: Python 3.10+
-- **LLM**: OpenAI GPT-4o
-- **Media**: MoviePy, ElevenLabs, gTTS, Pexels API, DALL-E 3
-- **Publishing**: YouTube Data API v3
-- **DevOps**: Pydantic Settings, Structured Logging
+## Tech Stack
 
-## 🚀 Getting Started
+- Python 3.10+
+- Pydantic / Pydantic Settings
+- Requests and BeautifulSoup for source-page research
+- Ollama for local LLM generation
+- spaCy for optional local named-entity recognition
+- Edge-TTS for narration
+- MoviePy for video rendering
+- Pillow and NumPy for graphics/captions
+- Pexels and Pixabay APIs for free stock visuals
+- YouTube Data API v3 for publishing
 
-### 1. Prerequisites
-- Python installed on your system.
-- `ffmpeg` installed (required for MoviePy rendering).
+## Project Structure
 
-### 2. Installation
-```powershell
-# Clone the repository (if applicable)
-# cd autocast
+```text
+main.py                         Main orchestration entry point
+test_quality_pipeline.py         Offline quality-pipeline smoke test
+test_discovery.py                Trend discovery smoke test
 
-# Install dependencies
-pip install -r requirements.txt
+src/core                         Settings, logger, LLM client, shared models
+src/ingestion                    Hacker News, RSS, Reddit ingestion
+src/intelligence                 Discovery, scoring, story research, script, content correction, audit
+src/media                        TTS, audio normalization, assets, thumbnails, rendering
+src/publishing                   Metadata and YouTube upload
+
+data/audio                       Generated narration
+data/assets                      Downloaded or generated scene visuals
+data/thumbnails                  Generated thumbnails
+data/renders                     Final videos
+logs/app.log                     Runtime logs
 ```
 
-### 3. Configuration
-Rename `.env.example` to `.env` and configure your local/free services:
-- `OLLAMA_BASE_URL`: Usually `http://localhost:11434`.
-- `OLLAMA_MODEL`: Default `mistral` (ensure you've run `ollama pull mistral`).
-- `TTS_VOICE`: The Edge-TTS voice to use (e.g., `en-US-GuyNeural`).
-- `PEXELS_API_KEY` & `PIXABAY_API_KEY`: Optional but recommended for stock visuals.
-- `YOUTUBE_CLIENT_ID` & `YOUTUBE_CLIENT_SECRET`: For automated publishing.
+## Requirements
 
-### 4. Running the System
+Install these before running:
+
+- Python 3.10 or newer
+- ffmpeg
+- Optional: Ollama, for better LLM-generated story/script/scene planning
+- Optional: spaCy English model, for stronger local entity extraction
+- Optional: Pexels API key, for stock video sourcing
+- Optional: YouTube OAuth credentials, for upload
+
+On Windows, verify Python:
+
 ```powershell
-python main.py
+python --version
 ```
 
-## 📁 Project Structure
+Verify ffmpeg:
 
-- `src/ingestion`: APIs and scrapers for trend discovery.
-- `src/intelligence`: LLM agents for verification, strategy, and scripting.
-- `src/media`: Engines for TTS, asset sourcing, and video rendering.
-- `src/publishing`: SEO optimization and YouTube API integration.
-- `data/`: Local storage for generated audio, assets, thumbnails, and renders.
-- `logs/`: Application execution logs.
+```powershell
+ffmpeg -version
+```
 
-## 🛡️ License
-MIT License - Created with love by Antigravity.
+If system ffmpeg is unavailable, MoviePy/imageio-ffmpeg can still help rendering, but installing ffmpeg globally is recommended.
+
+## Setup
+
+From the project folder:
+
+```powershell
+cd D:\autocast
+```
+
+Create a virtual environment if you do not already have one:
+
+```powershell
+python -m venv venv
+```
+
+Activate it:
+
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+
+Install dependencies:
+
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Install the optional spaCy English model:
+
+```powershell
+python -m spacy download en_core_web_sm
+```
+
+If this model is not installed, AutoCast still runs with dictionary and rule-based entity extraction.
+
+## Environment Configuration
+
+Create `.env` from `.env.example` and fill in the values you want to use.
+
+Minimum local configuration:
+
+```env
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=mistral
+OLLAMA_TIMEOUT_SECONDS=600
+OLLAMA_RETRY_ATTEMPTS=3
+TTS_VOICE=en-US-GuyNeural
+NICHE=technology
+LANGUAGE=en
+REGION=US
+VIDEO_FORMAT=short
+UPLOAD_SCHEDULE=daily
+TREND_MAX_AGE_DAYS=14
+SCRIPT_MIN_RUNTIME_SECONDS=20
+SHORT_TARGET_RUNTIME_SECONDS=32
+CONTENT_CORRECTOR_USE_LLM=true
+RESEARCH_MAX_SOURCES=3
+RESEARCH_FETCH_TIMEOUT_SECONDS=12
+RESEARCH_MAX_HTML_CHARS=400000
+```
+
+Optional stock-asset keys:
+
+```env
+PEXELS_API_KEY=your_pexels_api_key_here
+PIXABAY_API_KEY=your_pixabay_api_key_here
+```
+
+Optional YouTube publishing:
+
+```env
+YOUTUBE_CLIENT_ID=your_youtube_client_id_here
+YOUTUBE_CLIENT_SECRET=your_youtube_client_secret_here
+```
+
+Important: if YouTube credentials and a valid `token.pickle` are present, `main.py` can upload the rendered video as a private YouTube video. For local rendering only, leave YouTube credentials blank or run with blank YouTube environment variables.
+
+## Optional Ollama Setup
+
+Install Ollama, then pull a model:
+
+```powershell
+ollama pull mistral
+```
+
+Start Ollama:
+
+```powershell
+ollama serve
+```
+
+The system still runs without Ollama. In that case, it uses fallback strategy/script/scene logic.
+
+You can verify Ollama is reachable:
+
+```powershell
+Invoke-RestMethod http://localhost:11434/api/tags
+```
+
+## How To Run
+
+Use the virtual environment Python:
+
+```powershell
+.\venv\Scripts\python.exe main.py
+```
+
+The pipeline will:
+
+1. Fetch trends.
+2. Verify and rank them.
+3. Select the top trend.
+4. Build story context.
+5. Fetch source-page research for better facts.
+6. Generate strategy and script.
+7. Correct narration content using fetched internet facts and the local model when available.
+8. Enforce minimum runtime, source-backed information density, and URL-free spoken text.
+9. Create narration audio.
+10. Source or generate visuals per scene.
+11. Generate thumbnail.
+12. Run quality audit.
+13. Render the final video.
+14. Generate metadata.
+15. Publish only if YouTube is configured.
+
+Outputs are written to:
+
+```text
+data/audio
+data/assets
+data/thumbnails
+data/renders
+```
+
+The final video is usually:
+
+```text
+data/renders/trend_video_0.mp4
+```
+
+## Run Without Uploading To YouTube
+
+PowerShell one-time local-render run:
+
+```powershell
+$env:YOUTUBE_CLIENT_ID=''
+$env:YOUTUBE_CLIENT_SECRET=''
+.\venv\Scripts\python.exe main.py
+```
+
+This still generates the video locally, but YouTube publishing is disabled for that process.
+
+## Smoke Tests
+
+Run the offline quality pipeline test:
+
+```powershell
+.\venv\Scripts\python.exe test_quality_pipeline.py
+```
+
+This does not require Ollama, Pexels, Pixabay, or YouTube. It verifies:
+
+- story context generation
+- entity filtering
+- weak 5-second script correction into a 20+ second source-backed script
+- removal of spoken URLs/source-reader language before TTS
+- scene planning
+- fallback visual generation
+- thumbnail generation
+- quality audit
+
+Run discovery test:
+
+```powershell
+.\venv\Scripts\python.exe test_discovery.py
+```
+
+This verifies Hacker News/RSS trend ingestion and ranking.
+
+Compile-check the project:
+
+```powershell
+.\venv\Scripts\python.exe -m compileall main.py test_quality_pipeline.py src
+```
+
+## YouTube Authentication
+
+To publish to YouTube:
+
+1. Add `YOUTUBE_CLIENT_ID` and `YOUTUBE_CLIENT_SECRET` to `.env`.
+2. Run:
+
+```powershell
+.\venv\Scripts\python.exe setup_youtube_auth.py
+```
+
+3. Complete the browser OAuth flow.
+4. A `token.pickle` file will be created.
+5. Run:
+
+```powershell
+.\venv\Scripts\python.exe main.py
+```
+
+Videos are uploaded as private by default.
+
+## Interview Explanation
+
+A good summary:
+
+> AutoCast AI is a Python pipeline that automates short-form tech-news video creation. It ingests trending stories, verifies them, understands the story semantically, writes a script, plans scene-level visuals, sources or generates matching assets, creates narration, renders a vertical video, generates thumbnail/metadata, audits quality, and can publish to YouTube.
+
+Key architecture:
+
+- `src/ingestion`: collects candidate news stories.
+- `src/intelligence`: decides what story matters and how to tell it.
+- `src/media`: turns the script into audio, visuals, thumbnails, captions, and video.
+- `src/publishing`: prepares metadata and uploads to YouTube.
+
+Most important improvement:
+
+> The earlier issue was generic visuals. The upgrade adds story understanding, scene-level visual requirements, entity-aware search queries, asset relevance scoring, contextual fallback graphics, and a final quality audit.
+
+V2 upgrade:
+
+> The second upgrade adds stricter entity extraction with optional spaCy NER, stale-content filtering, semantic visual direction, parallel asset search, stronger asset thresholds for data/company scenes, scene transitions, Ken Burns-style motion for graphics, and stricter quality scoring.
+
+V3 quality/runtime upgrade:
+
+> The latest upgrade fixes the short low-quality video problem by adding article-source research, a `ResearchBrief`, minimum runtime settings, script information-density checks, clean narration without bracket labels, and an audit rule that rejects scripts under the configured minimum duration.
+
+V4 content-corrector upgrade:
+
+> The newest upgrade adds a final content corrector between scriptwriting and TTS. The app fetches internet source facts, passes those facts to the local Ollama model when available, and then enforces deterministic checks so the narration has a clear message, uses only source-backed facts, and never reads URLs, domains, or source-link language aloud.
+
+Why it is robust:
+
+> The system degrades gracefully. If Ollama fails or returns a weak script, rule-based source-backed logic still works. If article pages cannot be fetched, discovery summaries are used. If stock APIs fail, contextual visuals are generated locally. If YouTube credentials are missing, the final video is still rendered locally.
+
+## News API Notes
+
+Extra news APIs are optional, not mandatory. The current version already improves factual depth by reading the URLs discovered from Hacker News/RSS and extracting short source-backed facts. A NewsAPI/GNews-style integration would mainly improve story coverage and source variety; it would not by itself fix weak videos. The weak-video fix is the runtime gate plus research-backed script rewriting.
+
+Important architecture note: Ollama itself does not browse the web. AutoCast connects to the internet with Python, extracts facts into `ResearchBrief`, and then gives that compact fact pack to the local model for correction.
+
+## Common Issues
+
+Ollama connection refused:
+
+```text
+HTTPConnectionPool(host='localhost', port=11434)
+```
+
+Fix: start Ollama with `ollama serve`, or ignore it and use fallback mode.
+
+Generated video is too short or generic:
+
+```text
+Script Generated (Runtime: 5s)
+```
+
+Older builds accepted short LLM output. The current version rewrites scripts that are under `SCRIPT_MIN_RUNTIME_SECONDS` or too generic. Set `SCRIPT_MIN_RUNTIME_SECONDS=20` or higher in `.env`, then rerun `main.py`.
+
+Narration reads URLs aloud:
+
+```text
+https://example.com/...
+```
+
+Fix: rerun with the current content-corrector version. The pipeline now removes URLs/domains before TTS, asks the local model for a cleaner message when available, and fails audit if URL-like text remains.
+
+spaCy model missing:
+
+```text
+spaCy model en_core_web_sm is not available
+```
+
+Fix:
+
+```powershell
+.\venv\Scripts\python.exe -m spacy download en_core_web_sm
+```
+
+This is optional. The app still runs with fallback entity extraction.
+
+No Pixabay assets:
+
+```text
+PIXABAY_API_KEY not found
+```
+
+This is okay. Pexels or generated fallback visuals can still be used.
+
+YouTube service not initialized:
+
+```text
+YouTube API credentials missing
+```
+
+This is okay for local rendering. Add credentials and run OAuth only if you want uploads.
+
+YouTube OAuth `invalid_grant`:
+
+```text
+google.auth.exceptions.RefreshError: invalid_grant
+```
+
+This means `token.pickle` is expired, revoked, or does not match the current OAuth app credentials. Local rendering still works, but YouTube publishing is disabled until you re-authenticate.
+
+Fix:
+
+```powershell
+Remove-Item .\token.pickle
+.\venv\Scripts\python.exe setup_youtube_auth.py
+```
+
+Rendering is slow:
+
+MoviePy rendering can be CPU-heavy, especially with 1080x1920 vertical clips. Let the command finish; output appears in `data/renders`.

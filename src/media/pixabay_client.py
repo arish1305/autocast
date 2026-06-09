@@ -10,8 +10,9 @@ class PixabayClient:
     
     def __init__(self):
         self.api_key = settings.PIXABAY_API_KEY
-        if not self.api_key:
+        if not self.api_key or self.api_key.startswith("your_"):
             logger.warning("PIXABAY_API_KEY not found. Pixabay sourcing will be disabled.")
+            self.api_key = None
             
     def search_videos(self, query: str, limit: int = 3) -> List[Dict]:
         """Searches for videos on Pixabay."""
@@ -26,7 +27,7 @@ class PixabayClient:
                 "per_page": min(limit, 20),
                 "safesearch": "true"
             }
-            response = requests.get(self.BASE_URL, params=params)
+            response = requests.get(self.BASE_URL, params=params, timeout=20)
             response.raise_for_status()
             
             hits = response.json().get("hits", [])
