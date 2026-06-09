@@ -208,38 +208,75 @@ def _llm_scene_breakdown(
 ) -> List[VisualScene]:
     context_block = story_context.compact_context() if story_context else "No story context available."
     prompt = f"""
-Split this narration into short visual scenes for a vertical technology news video.
+You are the visual director for AutoCast AI, a vertical technology-news video channel.
+Your task is to convert narration into a scene-by-scene visual plan that a renderer can execute.
 
-Story context:
+GOAL
+Create a sequence of visual scenes that makes the story easier to understand, not just prettier.
+Every scene must map to a specific part of the narration and should help the viewer follow:
+- what happened
+- who/what is involved
+- why it matters
+- what to watch next
+
+STORY CONTEXT
 {context_block}
 
-Narration:
+NARRATION TO SPLIT
 {_clean_script(script_text)}
 
-Target runtime: {target_duration or "unknown"} seconds.
+TARGET RUNTIME
+{target_duration or "unknown"} seconds
 
-Return JSON with a top-level "scenes" array. Each scene must include:
-- scene_id: integer
-- segment_text: exact narration covered by this scene
-- duration: 5-10 seconds
-- visual_requirement: specific visual direction, not generic stock
-- keywords: 4-6 precise terms
-- entities: entity names from the narration/context
-- search_queries: 3-5 specific stock-search queries
-- caption_text: 2-6 punchy words for on-screen caption
-- visual_type: one of newsroom, company, product, market, data, explainer, location, people, closing
-- subjects: concrete visual subjects, not filler words
-- action: concrete on-screen action
-- location: likely setting if any
-- emotion: professional, urgent, analytical, optimistic, concerned
-- transition_type: cut, crossfade, push, zoom, headline
-- graphic_type: headline, statistic, timeline, company-card, explainer, none
+SCENE PLANNING RULES
+1. Create 4-8 scenes for Shorts. Use fewer scenes for shorter narration and more scenes for denser narration.
+2. Every scene represents one idea and covers exact narration text in order.
+3. The first scene must make the story topic visually obvious.
+4. Use contextual graphics for abstract ideas, statistics, regulation, market impact, timelines, or unavailable product footage.
+5. Use stock-search queries only when real-world footage can reasonably match the scene.
+6. Prefer company/product/technology/region-specific visuals over generic office footage.
+7. Avoid broad searches like "technology innovation", "future tech", "business people", or "AI concept".
+8. Do not invent facts, product designs, people, numbers, logos, or UI details.
+9. Captions should be 2-6 words, phone-readable, and useful without duplicating the full narration.
+10. Visual requirements should describe the shot or graphic clearly enough for a renderer or asset search system.
 
-Rules:
-1. Every scene represents one idea.
-2. Prefer company/product/technology-specific visuals.
-3. Avoid broad searches like "technology innovation".
-4. Do not invent facts.
+VISUAL TYPES
+- newsroom: general news framing
+- company: company/entity-focused story card
+- product: product/app/device/service visual
+- market: finance, IPO, valuation, stock, investor context
+- data: statistics, charts, timelines, comparisons
+- explainer: abstract concept explained with simple graphic
+- location: region/country/city/regulation setting
+- people: named person or user/workforce impact
+- closing: final implication or what to watch next
+
+GRAPHIC TYPES
+- headline: story title/card
+- statistic: number-focused graphic
+- timeline: date/release/delay sequence
+- company-card: company/product/entity card
+- explainer: simple cause-effect visual
+- none: only when stock footage is clearly appropriate
+
+Return only valid JSON with a top-level "scenes" array. Each scene must include:
+{{
+  "scene_id": 1,
+  "segment_text": "exact narration covered by this scene",
+  "duration": 6,
+  "visual_requirement": "specific visual direction, not generic stock",
+  "keywords": ["precise", "search", "terms"],
+  "entities": ["entity names from narration/context"],
+  "search_queries": ["specific stock-search query", "second query", "third query"],
+  "caption_text": "2-6 punchy words",
+  "visual_type": "newsroom",
+  "subjects": ["concrete visual subjects"],
+  "action": "concrete on-screen action",
+  "location": "likely setting if any",
+  "emotion": "professional",
+  "transition_type": "headline",
+  "graphic_type": "headline"
+}}
 """
 
     result = llm_client.generate_json(prompt)

@@ -42,21 +42,46 @@ class ThumbnailGenerator:
 
     def generate_thumbnail_concepts(self, topic: str, strategy_summary: str) -> List[ThumbnailConcept]:
         prompt = f"""
-Generate 5 thumbnail concepts for a technology news YouTube video.
+You are a thumbnail strategist for AutoCast AI, a technology-news YouTube channel.
+Generate 5 thumbnail concepts that are clear, factual, and readable on a phone.
 
-Topic: {topic}
-Summary: {strategy_summary[:800]}
+VIDEO TOPIC
+{topic}
 
-Return JSON with a "concepts" array. Each concept needs:
+STORY SUMMARY / ANGLE
+{strategy_summary[:1000]}
+
+THUMBNAIL GOAL
+The thumbnail should instantly communicate the story's main tension or implication.
+It should make viewers curious without lying or exaggerating.
+
+CONCEPT REQUIREMENTS
+Each concept needs:
 - hook_text: 2-5 words, max 24 characters, high curiosity but factual
-- emotional_angle: short phrase like "shock", "urgency", "breakthrough", "risk"
-- visual_focus: concrete object/entity the thumbnail should show
-- accent_color: hex color
+- emotional_angle: short phrase like "urgency", "risk", "delay", "market pressure", "breakthrough"
+- visual_focus: concrete object/entity the thumbnail should show, such as company, product, person, region, chart, device
+- accent_color: hex color that contrasts with dark background and white text
 
-Rules:
-1. No misleading clickbait.
-2. Text must be readable on a phone.
-3. Prefer specific company/product/entity wording.
+DESIGN RULES
+1. No misleading clickbait or fake shock.
+2. Text must be readable on a phone at small size.
+3. Prefer specific company/product/entity wording over generic words like "Tech", "AI", or "Future".
+4. Use simple visual ideas: device + region, company card + warning, chart + number, person + decision.
+5. Avoid long sentences, URLs, dates unless the date is central to the story, and abstract phrases.
+6. Avoid duplicate concepts; each should emphasize a different angle.
+7. The thumbnail text must not promise something the video does not explain.
+
+Return only valid JSON with this shape:
+{{
+  "concepts": [
+    {{
+      "hook_text": "Siri Delayed",
+      "emotional_angle": "urgency",
+      "visual_focus": "Apple Siri Europe",
+      "accent_color": "#00b8a9"
+    }}
+  ]
+}}
 """
         result = llm_client.generate_json(prompt)
         raw_concepts = result.get("concepts") if isinstance(result, dict) else result
