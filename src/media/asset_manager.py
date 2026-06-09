@@ -133,6 +133,14 @@ def source_visual_assets(
         if not scene.search_queries:
             scene.search_queries = _build_search_queries(scene.segment_text, scene.keywords, scene.entities, story_context)
 
+        if _should_use_contextual_visual(scene, index):
+            logger.info(
+                f"Using generated contextual visual for scene {scene.scene_id}: "
+                f"{scene.visual_requirement}"
+            )
+            _create_contextual_scene_image(scene, story_context, index)
+            continue
+
         logger.info(f"Sourcing visual for scene {scene.scene_id}: {scene.visual_requirement}")
         candidates = _collect_candidates(scene)
         candidates.sort(key=lambda item: item["final_score"], reverse=True)
@@ -173,6 +181,16 @@ def source_visual_assets(
         _create_contextual_scene_image(scene, story_context, index)
 
     return scenes
+
+
+def _should_use_contextual_visual(scene: VisualScene, index: int) -> bool:
+    if index == 0:
+        return True
+    if scene.graphic_type in {"statistic", "company-card", "timeline"}:
+        return True
+    if scene.visual_type in {"data", "market"}:
+        return True
+    return False
 
 
 def _minimum_asset_score(scene: VisualScene, default_score: float) -> float:

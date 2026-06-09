@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     VIDEO_FORMAT: str = "short"  # short or long
     UPLOAD_SCHEDULE: str = "daily"
     TREND_MAX_AGE_DAYS: int = 14
+    SCRIPT_MIN_RUNTIME_SECONDS: int = 20
+    SHORT_TARGET_RUNTIME_SECONDS: int = 32
+    CONTENT_CORRECTOR_USE_LLM: bool = True
+    RESEARCH_MAX_SOURCES: int = 3
+    RESEARCH_FETCH_TIMEOUT_SECONDS: int = 12
+    RESEARCH_MAX_HTML_CHARS: int = 400000
     
     # Paths
     DATA_DIR: str = "data"
