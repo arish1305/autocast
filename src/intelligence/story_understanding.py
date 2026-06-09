@@ -106,32 +106,64 @@ def build_story_context(item: TrendItem, use_llm: bool = True) -> StoryContext:
         return fallback
 
     prompt = f"""
-Analyze this technology news item before video production.
+You are the story-understanding analyst for AutoCast AI.
+Before any script or visuals are generated, extract the real story structure from this technology news item.
 
-Headline: {item.topic}
-Summary: {_clean_text(item.summary)}
-Sources: {", ".join(fallback.source_urls[:5])}
+INPUT
+Headline:
+{item.topic}
 
-Return JSON with these keys:
-- headline
-- summary
-- main_story_angle
-- companies
-- products
-- organizations
-- technologies
-- people
-- locations
-- statistics
-- timelines
-- key_points
-- search_focus
+Summary:
+{_clean_text(item.summary)}
 
-Rules:
-1. Extract only meaningful named entities.
-2. Do not include sentence starters, pronouns, generic words, or filler words.
-3. Do not invent facts that are not in the headline or summary.
+Known source URLs:
+{", ".join(fallback.source_urls[:5]) or "No source URLs available."}
+
+TASK
+Return a compact but useful semantic brief for video production. This is not a script.
+The goal is to identify concrete entities, the central angle, and search terms that can guide scriptwriting,
+visual planning, thumbnail design, and quality checks.
+
+WHAT TO EXTRACT
+- headline: cleaned headline, preserving the actual subject.
+- summary: one accurate sentence summarizing the story.
+- main_story_angle: one phrase explaining the practical meaning or tension.
+- companies: real company names only.
+- products: real product/model/service names only.
+- organizations: agencies, standards bodies, universities, publishers, or institutions.
+- technologies: technology categories explicitly present, such as AI, chips, cloud, cybersecurity.
+- people: named people only.
+- locations: real places or regions only.
+- statistics: numbers with units exactly as present in the input.
+- timelines: dates, years, "this week", launch windows, or schedule references exactly as present.
+- key_points: 3-6 factual points that a viewer should understand.
+- search_focus: 5-10 concrete visual/search anchors, such as company + product + region + technology.
+
+STRICT RULES
+1. Extract only meaningful named entities. Do not include sentence starters, pronouns, filler words, or generic words.
+2. Do not invent facts, numbers, dates, people, or organizations that are not in the headline or summary.
+3. Do not include full URLs in any field.
 4. Prefer concrete visual subjects over abstract wording.
+5. Keep each list item short. Avoid paragraph-length entities.
+6. If a field has no evidence, return an empty array for that field.
+7. The main_story_angle should be useful for a video, for example "AI feature delay in Europe" or "IPO market pressure".
+
+Return only valid JSON with this exact shape:
+{{
+  "headline": "clean headline",
+  "summary": "one accurate sentence",
+  "main_story_angle": "practical story angle",
+  "companies": [],
+  "products": [],
+  "organizations": [],
+  "technologies": [],
+  "people": [],
+  "locations": [],
+  "statistics": [],
+  "timelines": [],
+  "key_points": [],
+  "search_focus": []
+}}
 """
 
     result = llm_client.generate_json(prompt)
