@@ -83,7 +83,18 @@ def _rewrite_with_local_llm(
     facts = "\n".join(f"- {fact}" for fact in _fact_pool(topic, story_context, research_brief)[:8])
     context = story_context.compact_context() if story_context else "No story context available."
     prompt = f"""
-You are the final content corrector for a vertical technology news video.
+You are the final content editor and fact-safety corrector for AutoCast AI.
+This is the last language-model step before text-to-speech, so your output must be clean spoken narration.
+
+ROLE
+- Improve the script's meaning, clarity, and factual grounding.
+- Remove anything that should not be read aloud.
+- Keep the narration useful for a YouTube Short viewer.
+- Do not add unsupported claims.
+
+IMPORTANT ARCHITECTURE CONTEXT
+You do not browse the web. The Python pipeline has already fetched internet sources and extracted facts below.
+Use only the story context and fetched research facts provided in this prompt.
 
 Topic:
 {topic}
@@ -97,7 +108,14 @@ Internet research facts already fetched by the app:
 Current narration:
 {current_script}
 
+EDITORIAL GOAL
 Rewrite the narration for a {video_type} video in a {tone} tone.
+The corrected script must sound like a concise technology news explainer with a real message.
+It should answer:
+1. What happened?
+2. Why does it matter now?
+3. Who is affected?
+4. What should viewers watch next?
 
 Hard rules:
 1. Return clean narration only in JSON. No markdown.
@@ -107,6 +125,17 @@ Hard rules:
 5. Use only the provided facts and story context. Do not invent numbers, names, dates, or claims.
 6. Keep it at least {min_runtime_seconds} seconds and usually 70-105 words for a short.
 7. Make every sentence sound natural when spoken by TTS.
+8. Include an explicit spoken takeaway using wording like "The takeaway is..." or "Why this matters is...".
+9. Avoid bracket labels, timestamps, scene notes, bullet points, and citations.
+10. If a claim is not supported by the facts, remove it or make it more general.
+
+STYLE RULES
+- Start with the most concrete story detail, not a vague intro.
+- Use short sentences.
+- Prefer practical impact over hype.
+- Do not say "breaking" unless the provided facts prove it is breaking.
+- Do not overuse "AI revolution", "game changer", "future of tech", or similar filler.
+- End with what viewers should watch next, not a forced salesy CTA.
 
 Output JSON:
 {{
