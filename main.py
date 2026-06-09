@@ -42,6 +42,21 @@ def main():
 
                 strategy = create_content_strategy(trend, story_context)
                 if strategy:
+                    if settings.VIDEO_FORMAT == "short":
+                        if strategy.video_type != "short":
+                            logger.warning(
+                                f"Strategy requested '{strategy.video_type}', but VIDEO_FORMAT=short. "
+                                "Forcing short-form production."
+                            )
+                        strategy.video_type = "short"
+                        strategy.duration_seconds = min(
+                            60,
+                            max(
+                                settings.SCRIPT_MIN_RUNTIME_SECONDS,
+                                settings.SHORT_TARGET_RUNTIME_SECONDS,
+                                strategy.duration_seconds or 0,
+                            ),
+                        )
                     logger.info(f"Strategy for '{trend.topic}': {strategy.video_type}, {strategy.tone}")
                     
                     script = generate_script(

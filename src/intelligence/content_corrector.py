@@ -59,7 +59,7 @@ def correct_script_content(
 
     corrected = VideoScript(
         script_text=cleaned,
-        estimated_runtime=max(script.estimated_runtime, _estimated_runtime(cleaned), min_runtime),
+        estimated_runtime=max(_estimated_runtime(cleaned), min_runtime),
         source_facts=_clean_facts(script.source_facts or _fact_pool(topic, story_context, research_brief))[:6],
     )
     logger.info(
