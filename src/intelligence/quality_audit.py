@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from src.core.config import settings
 from src.core.logger import logger
 from src.intelligence.scriptwriter import VideoScript
 from src.intelligence.story_understanding import StoryContext
@@ -48,6 +49,13 @@ def audit_video_plan(
         issues.append("Narration has long sentences or leftover script labels.")
     if retention < 80:
         issues.append("Hook/pacing could be stronger for short-form retention.")
+    if script.estimated_runtime < settings.SCRIPT_MIN_RUNTIME_SECONDS:
+        issues.append(
+            f"Script is shorter than the minimum {settings.SCRIPT_MIN_RUNTIME_SECONDS}s runtime."
+        )
+    artifact_free = not _has_forbidden_narration_artifacts(script.script_text)
+    if not artifact_free:
+        issues.append("Narration contains URLs, domains, or source-reader language.")
     if thumbnail < 85:
         issues.append("Thumbnail was not generated before audit.")
     if transition_quality < 80:
@@ -75,7 +83,13 @@ def audit_video_plan(
         transition_quality_score=round(transition_quality, 2),
         story_coherence_score=round(story_coherence, 2),
         overall_score=overall,
-        approved=overall >= 85 and scene_relevance >= 86 and visual_quality >= 82,
+        approved=(
+            overall >= 85
+            and scene_relevance >= 86
+            and visual_quality >= 82
+            and script.estimated_runtime >= settings.SCRIPT_MIN_RUNTIME_SECONDS
+            and artifact_free
+        ),
         issues=issues,
     )
 
@@ -137,7 +151,8 @@ def _narration_quality(script_text: str) -> float:
         return 50.0
     avg_words = mean(len(sentence.split()) for sentence in sentences)
     long_sentence_penalty = max(avg_words - 20, 0) * 1.2
-    return max(60.0, min(96.0, 96.0 - long_sentence_penalty))
+    artifact_penalty = 28.0 if _has_forbidden_narration_artifacts(script_text) else 0.0
+    return max(50.0, min(96.0, 96.0 - long_sentence_penalty - artifact_penalty))
 
 
 def _retention_score(script_text: str, scenes: List[VisualScene]) -> float:
@@ -173,6 +188,23 @@ def _story_coherence(story_context: StoryContext, script_text: str, scenes: List
     produced_terms = _terms([script_text, *[scene.segment_text for scene in scenes], *[scene.visual_requirement for scene in scenes]])
     coverage = len(important_terms.intersection(produced_terms)) / max(len(important_terms), 1)
     return min(96.0, 72.0 + coverage * 24.0)
+
+
+def _has_forbidden_narration_artifacts(script_text: str) -> bool:
+    text = script_text or ""
+    if re.search(r"https?://|www\.|\b\S+\.(?:com|org|net|io|ai|co|dev|html|xml|rss)\b", text, flags=re.IGNORECASE):
+        return True
+    lowered = text.lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "source coverage from",
+            "sources checked",
+            "according to the url",
+            "read this link",
+            "visit the website",
+        )
+    )
 
 
 def _terms(values: List[str]) -> set:

@@ -10,13 +10,16 @@ The main goal of this version is video quality: every scene should be tied to th
 - Scores and verifies stories by freshness, engagement, source mentions, and authority.
 - Filters stale content older than the configured freshness window.
 - Builds story understanding: companies, products, organizations, technologies, people, locations, events, statistics, timelines, main story angle, and key talking points.
+- Builds a source-backed research brief by reading the original article pages when available.
 - Uses optional spaCy NER plus LLM-assisted extraction and strict entity filters.
 - Generates strategy and script using local Ollama when available.
-- Falls back to deterministic rule-based logic if Ollama is not running.
+- Runs a content-correction stage before TTS so narration has a real takeaway and never reads URLs aloud.
+- Enforces a minimum short-form runtime and rewrites weak/generic scripts with source-backed facts.
+- Falls back to deterministic rule-based logic if Ollama is not running or returns poor output.
 - Splits narration into scene-level visual plans with visual type, subjects, action, emotion, location, transition, and graphic type.
 - Creates semantic stock-search queries for each scene instead of raw script fragments.
 - Scores visual candidates by relevance and quality.
-- Generates contextual fallback scene graphics when no good stock asset is found.
+- Uses contextual news graphics for opening/data/company scenes and fallback graphics when no good stock asset is found.
 - Creates Edge-TTS narration and normalizes audio with ffmpeg.
 - Renders vertical 9:16 video with MoviePy, captions, light motion, and transitions.
 - Generates mobile-readable thumbnails with Pillow.
@@ -27,6 +30,7 @@ The main goal of this version is video quality: every scene should be tied to th
 
 - Python 3.10+
 - Pydantic / Pydantic Settings
+- Requests and BeautifulSoup for source-page research
 - Ollama for local LLM generation
 - spaCy for optional local named-entity recognition
 - Edge-TTS for narration
@@ -44,7 +48,7 @@ test_discovery.py                Trend discovery smoke test
 
 src/core                         Settings, logger, LLM client, shared models
 src/ingestion                    Hacker News, RSS, Reddit ingestion
-src/intelligence                 Discovery, scoring, story understanding, script, audit
+src/intelligence                 Discovery, scoring, story research, script, content correction, audit
 src/media                        TTS, audio normalization, assets, thumbnails, rendering
 src/publishing                   Metadata and YouTube upload
 
@@ -133,6 +137,12 @@ REGION=US
 VIDEO_FORMAT=short
 UPLOAD_SCHEDULE=daily
 TREND_MAX_AGE_DAYS=14
+SCRIPT_MIN_RUNTIME_SECONDS=20
+SHORT_TARGET_RUNTIME_SECONDS=32
+CONTENT_CORRECTOR_USE_LLM=true
+RESEARCH_MAX_SOURCES=3
+RESEARCH_FETCH_TIMEOUT_SECONDS=12
+RESEARCH_MAX_HTML_CHARS=400000
 ```
 
 Optional stock-asset keys:
@@ -187,14 +197,17 @@ The pipeline will:
 2. Verify and rank them.
 3. Select the top trend.
 4. Build story context.
-5. Generate strategy and script.
-6. Create narration audio.
-7. Source or generate visuals per scene.
-8. Generate thumbnail.
-9. Run quality audit.
-10. Render the final video.
-11. Generate metadata.
-12. Publish only if YouTube is configured.
+5. Fetch source-page research for better facts.
+6. Generate strategy and script.
+7. Correct narration content using fetched internet facts and the local model when available.
+8. Enforce minimum runtime, source-backed information density, and URL-free spoken text.
+9. Create narration audio.
+10. Source or generate visuals per scene.
+11. Generate thumbnail.
+12. Run quality audit.
+13. Render the final video.
+14. Generate metadata.
+15. Publish only if YouTube is configured.
 
 Outputs are written to:
 
@@ -235,6 +248,8 @@ This does not require Ollama, Pexels, Pixabay, or YouTube. It verifies:
 
 - story context generation
 - entity filtering
+- weak 5-second script correction into a 20+ second source-backed script
+- removal of spoken URLs/source-reader language before TTS
 - scene planning
 - fallback visual generation
 - thumbnail generation
@@ -296,9 +311,23 @@ V2 upgrade:
 
 > The second upgrade adds stricter entity extraction with optional spaCy NER, stale-content filtering, semantic visual direction, parallel asset search, stronger asset thresholds for data/company scenes, scene transitions, Ken Burns-style motion for graphics, and stricter quality scoring.
 
+V3 quality/runtime upgrade:
+
+> The latest upgrade fixes the short low-quality video problem by adding article-source research, a `ResearchBrief`, minimum runtime settings, script information-density checks, clean narration without bracket labels, and an audit rule that rejects scripts under the configured minimum duration.
+
+V4 content-corrector upgrade:
+
+> The newest upgrade adds a final content corrector between scriptwriting and TTS. The app fetches internet source facts, passes those facts to the local Ollama model when available, and then enforces deterministic checks so the narration has a clear message, uses only source-backed facts, and never reads URLs, domains, or source-link language aloud.
+
 Why it is robust:
 
-> The system degrades gracefully. If Ollama fails, rule-based logic still works. If stock APIs fail, contextual visuals are generated locally. If YouTube credentials are missing, the final video is still rendered locally.
+> The system degrades gracefully. If Ollama fails or returns a weak script, rule-based source-backed logic still works. If article pages cannot be fetched, discovery summaries are used. If stock APIs fail, contextual visuals are generated locally. If YouTube credentials are missing, the final video is still rendered locally.
+
+## News API Notes
+
+Extra news APIs are optional, not mandatory. The current version already improves factual depth by reading the URLs discovered from Hacker News/RSS and extracting short source-backed facts. A NewsAPI/GNews-style integration would mainly improve story coverage and source variety; it would not by itself fix weak videos. The weak-video fix is the runtime gate plus research-backed script rewriting.
+
+Important architecture note: Ollama itself does not browse the web. AutoCast connects to the internet with Python, extracts facts into `ResearchBrief`, and then gives that compact fact pack to the local model for correction.
 
 ## Common Issues
 
@@ -309,6 +338,22 @@ HTTPConnectionPool(host='localhost', port=11434)
 ```
 
 Fix: start Ollama with `ollama serve`, or ignore it and use fallback mode.
+
+Generated video is too short or generic:
+
+```text
+Script Generated (Runtime: 5s)
+```
+
+Older builds accepted short LLM output. The current version rewrites scripts that are under `SCRIPT_MIN_RUNTIME_SECONDS` or too generic. Set `SCRIPT_MIN_RUNTIME_SECONDS=20` or higher in `.env`, then rerun `main.py`.
+
+Narration reads URLs aloud:
+
+```text
+https://example.com/...
+```
+
+Fix: rerun with the current content-corrector version. The pipeline now removes URLs/domains before TTS, asks the local model for a cleaner message when available, and fails audit if URL-like text remains.
 
 spaCy model missing:
 

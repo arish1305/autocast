@@ -1,6 +1,8 @@
 from src.core.logger import logger
 from src.core.config import settings
 from src.intelligence.discovery import discover_trends
+from src.intelligence.content_corrector import correct_script_content
+from src.intelligence.research import build_research_brief
 from src.intelligence.story_understanding import build_story_context
 from src.intelligence.strategy import create_content_strategy
 from src.intelligence.scriptwriter import generate_script
@@ -32,6 +34,11 @@ def main():
                     f"Story context ready: entities={story_context.entities[:5]}, "
                     f"technologies={story_context.technologies[:5]}"
                 )
+                research_brief = build_research_brief(trend, story_context)
+                logger.info(
+                    f"Research ready: sources={research_brief.source_count}, "
+                    f"facts={len(research_brief.verified_facts)}"
+                )
 
                 strategy = create_content_strategy(trend, story_context)
                 if strategy:
@@ -42,11 +49,27 @@ def main():
                         strategy.video_type, 
                         strategy.tone, 
                         strategy.narrative_beats,
-                        story_context
+                        story_context,
+                        research_brief,
+                        settings.SCRIPT_MIN_RUNTIME_SECONDS,
                     )
                     
                     if script:
+                        script = correct_script_content(
+                            trend.topic,
+                            script,
+                            story_context,
+                            research_brief,
+                            strategy.video_type,
+                            strategy.tone,
+                            settings.SCRIPT_MIN_RUNTIME_SECONDS,
+                        )
                         logger.info(f"Script Generated (Runtime: {script.estimated_runtime}s)")
+                        target_duration = max(
+                            settings.SCRIPT_MIN_RUNTIME_SECONDS,
+                            script.estimated_runtime,
+                            strategy.duration_seconds or 0,
+                        )
                         
                         # Phase 6: Voice Synthesis (Local/Free)
                         audio_filename = f"trend_audio_{i}.mp3"
@@ -61,7 +84,7 @@ def main():
                         scenes = break_script_into_scenes(
                             script.script_text,
                             story_context,
-                            strategy.duration_seconds or script.estimated_runtime,
+                            target_duration,
                         )
                         scenes = source_visual_assets(scenes, story_context)
                         
